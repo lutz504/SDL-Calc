@@ -9,8 +9,8 @@
     <h1>SDL Trados Kostenrechner</h1>
 
     <form action="" method="post" enctype="multipart/form-data">
-        <label for="file">Projektdatei (AnalysisReport.xml):</label><br>
-        <input type="file" name="file" id="file" accept=".xml" required><br><br>
+        <label for="file">Projektdatei (.sdlproj):</label><br>
+        <input type="file" name="file" id="file" accept=".sdlproj" required><br><br>
 
         <label for="wordPrice">Wortpreis (€):</label><br>
         <input type="number" step="0.01" name="wordPrice" id="wordPrice" placeholder="z.B. 0.12" required><br><br>
@@ -33,13 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $wordPrice = floatval($_POST['wordPrice']);
 
             // Analyse durchführen
-            $wordCounts = parseAnalysisReport($filePath);
-            $totalCost = calculateTotalCost($wordCounts, $wordPrice);
+            $statistics = parseProjectFile($filePath);
+            $totalCost = calculateTotalCost($statistics, $wordPrice);
 
             // Ergebnisse anzeigen
             echo "<h2>Analyseergebnisse:</h2>";
             echo "<ul>";
-            foreach ($wordCounts as $category => $count) {
+            foreach ($statistics as $category => $count) {
                 echo "<li>" . ucfirst($category) . ": $count Wörter</li>";
             }
             echo "</ul>";
@@ -53,56 +53,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Funktion zum Parsen der XML-Datei
-function parseAnalysisReport($filePath) {
-    if (!file_exists($filePath)) {
-        die("Die Datei $filePath wurde nicht gefunden.\n");
-    }
-
-    $xml = simplexml_load_file($filePath);
-    $result = [
-        'noMatch' => 0,
-        'fuzzyMatch75_99' => 0,
-        'exactMatch100' => 0,
-        'repetitions' => 0
+// Funktion zum Parsen der .sdlproj-Datei
+function parseProjectFile($filePath) {
+    $statistics = [
+        "newWords" => 0,
+        "repetitions" => 0,
+        "exactMatch100" => 0,
+        "fuzzyMatch95_99" => 0,
+        "fuzzyMatch85_94" => 0,
+        "fuzzyMatch75_84" => 0,
+        "noMatch" => 0
     ];
 
-    // Analyse der XML-Daten
-    foreach ($xml->xpath('//AnalysisBands/AnalysisBand') as $band) {
-        $name = (string) $band->Name;
-        $wordCount = (int) $band->WordCount;
+    // XML-Datei parsen
+    $xml = simplexml_load_file($filePath);
 
-        switch ($name) {
-            case 'Repetitions':
-                $result['repetitions'] += $wordCount;
-                break;
-            case '100%':
-                $result['exactMatch100'] += $wordCount;
-                break;
-            case '75%-99%':
-                $result['fuzzyMatch75_99'] += $wordCount;
-                break;
-            case 'No Match':
-                $result['noMatch'] += $wordCount;
-                break;
+    // New Words auslesen
+    $newWordsNode = $xml->xpath(".//New");
+    if (!empty($newWordsNode)) {
+        $statistics["newWords"] = (int)$newWordsNode[0]['Words'];
+    }
+
+    // AnalysisStatistics auslesen
+    foreach ($xml->xpath(".//AnalysisStatistics/WordCounts") as $stats) {
+        foreach ($stats as $wordCount) {
+            $tag = (string)$wordCount->getName();
+            $count = (int)$wordCount;
+
+            switch ($tag) {
+                case 'Repetitions':
+                    $statistics["repetitions"] += $count;
+                    break;
+                case 'Exact100Match':
+                    $statistics["exactMatch100"] += $count;
+                    break;
+                case 'Fuzzy95To99Match':
+                    $statistics["fuzzyMatch95_99"] += $count;
+                    break;
+                case 'Fuzzy85To94Match':
+                    $statistics["fuzzyMatch85_94"] += $count;
+                    break;
+                case 'Fuzzy75To84Match':
+                    $statistics["fuzzyMatch75_84"] += $count;
+                    break;
+                case 'NoMatch':
+                    $statistics["noMatch"] += $count;
+                    break;
+            }
         }
     }
 
-    return $result;
+    return $statistics;
 }
 
 // Funktion zur Berechnung der Gesamtkosten
-function calculateTotalCost($wordCounts, $wordPrice) {
+function calculateTotalCost($statistics, $wordPrice) {
     $costPerWord = [
-        'noMatch' => $wordPrice,           // Vollpreis pro Wort
-        'fuzzyMatch75_99' => $wordPrice * 0.5,   // 50 % des Wortpreises
-        'exactMatch100' => $wordPrice * 0.2,     // 20 % des Wortpreises
-        'repetitions' => $wordPrice * 0.1        // 10 % des Wortpreises
+        "newWords" => $wordPrice,
+        "repetitions" => $wordPrice * 0.1,
+        "exactMatch100" => $wordPrice * 0.2,
+        "fuzzyMatch95_99" => $wordPrice * 0.5,
+        "fuzzyMatch85_94" => $wordPrice * 0.6,
+        "fuzzyMatch75_84" => $wordPrice * 0.7,
+        "noMatch" => $wordPrice
     ];
 
     $totalCost = 0;
 
-    foreach ($wordCounts as $category => $count) {
+    foreach ($statistics as $category => $count) {
         $totalCost += $count * $costPerWord[$category];
     }
 
