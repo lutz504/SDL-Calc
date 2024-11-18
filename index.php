@@ -13,7 +13,7 @@
         <input type="file" name="file" id="file" accept=".sdlproj" required><br><br>
 
         <label for="wordPrice">Wortpreis (€):</label><br>
-        <input type="number" step="0.01" name="wordPrice" id="wordPrice" placeholder="z.B. 0.12" required><br><br>
+        <input type="number" step="0.01" name="wordPrice" id="wordPrice" placeholder="z.B. 0.12" value="0.12" required><br><br>
 
         <input type="submit" name="submit" value="Berechnen">
     </form>
